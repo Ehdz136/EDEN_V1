@@ -1,3 +1,4 @@
+
 import tkinter as tk
 import math
 import json
@@ -411,6 +412,7 @@ class EdenVisualizer:
                         outline=""
                     )
 
+        # Food
         for x, y in self.world.food:
             cx = x * self.cell_size + self.cell_size / 2
             cy = y * self.cell_size + self.cell_size / 2
@@ -422,6 +424,7 @@ class EdenVisualizer:
                 outline=""
             )
 
+        # Agents
         for agent in self.world.agents:
             cx = agent.x * self.cell_size + self.cell_size / 2
             cy = agent.y * self.cell_size + self.cell_size / 2
@@ -430,6 +433,7 @@ class EdenVisualizer:
                 agent.id % len(self.colors)
             ]
 
+            # Highlight selected agent
             if self.selected_agent == agent.id:
                 self.canvas.create_oval(
                     cx - 16, cy - 16,
@@ -478,12 +482,19 @@ class EdenVisualizer:
             (self.network_tab, "network")
         ):
             active = self.active_view == name
+            button.config(bg="#047857" if active else "#334155",
+                          fg="white", activebackground="#065f46")
+        self.view_hint.config(text=(
+            "Click a subject to inspect its relationships • Green: friends • Red: rivals"
+            if self.active_view == "network"
+            else "Click an agent to inspect its profile"
+        ))
 
-            button.config(
-                bg="#047857" if active else "#334155",
-                fg="white",
-                activebackground="#065f46"
-            )
+        button.config(
+            bg="#047857" if active else "#334155",
+            fg="white",
+            activebackground="#065f46"
+        )
 
         if self.active_view == "network":
             hint = (
@@ -639,6 +650,12 @@ class EdenVisualizer:
                 fill=fill,
                 font=("Consolas", 11, "bold")
             )
+            fill = self.colors[agent_id % len(self.colors)] if connected else "#475569"
+            canvas.create_oval(x - 21, y - 21, x + 21, y + 21,
+                               fill="#1c2933", outline="#ffffff" if highlighted else fill,
+                               width=4 if highlighted else 2)
+            canvas.create_text(x, y, text=f"{agent_id:03d}", fill=fill,
+                               font=("Consolas", 11, "bold"))
 
         if selected is None:
             footer = (
@@ -784,7 +801,7 @@ class EdenVisualizer:
             self.set_profile_text(
                 self.format_profile(agent)
             )
-
+       
     def format_profile(self, agent):
         social_lines = []
 
@@ -840,6 +857,9 @@ class EdenVisualizer:
             if episodes is not None
             else 0
         )
+        relationships = getattr(agent, "relationships", {})
+        friends = sum(1 for r in relationships.values() if r["trust"] >= 25)
+        rivals = sum(1 for r in relationships.values() if r["trust"] <= -40)
 
         profile = (
             f"SUBJECT {agent.id:03d}\n"
@@ -994,6 +1014,7 @@ class EdenVisualizer:
     # ======================================
 
     def set_profile_text(self, text):
+        # Keep the current scroll position when the simulation advances.
         previous_position = self.profile_text.yview()[0]
 
         self.profile_text.config(state="normal")
