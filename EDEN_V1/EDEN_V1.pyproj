@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>b141ec3b-76b6-452c-9c2a-af0dfbbc7bf9</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>Visualized_research\visualize_experiment003.py</StartupFile>
+    <StartupFile>visualizer.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>

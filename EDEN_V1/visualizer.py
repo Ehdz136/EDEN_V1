@@ -17,7 +17,8 @@ class EdenVisualizer:
         self.root.minsize(1000, 700)
         self.root.configure(bg="#101820")
 
-        self.world = World(seed=42)
+        self.learning_mode = "rule_based"
+        self.world = World(seed=42, learning_mode=self.learning_mode)
         self.running = False
         self.timer = None
 
@@ -259,7 +260,14 @@ class EdenVisualizer:
             padx=10,
             pady=7
         )
-        self.journal_tab_button.pack(side="left")
+        self.journal_tab_button.pack(side="left", padx=(0, 7))
+
+        self.intelligence_tab_button = tk.Button(
+            subject_tabs, text="INTELLIGENCE",
+            command=lambda: self.switch_subject_tab("intelligence"),
+            font=("Segoe UI", 9, "bold"), relief="flat", padx=10, pady=7
+        )
+        self.intelligence_tab_button.pack(side="left")
 
         # Scrollable observation area
         profile_body = tk.Frame(
@@ -347,6 +355,14 @@ class EdenVisualizer:
             pady=10
         )
         self.play_button.pack(side="left")
+
+        mode_frame = tk.Frame(controls, bg="#101820")
+        mode_frame.pack(side="left", padx=(16, 0))
+        tk.Label(mode_frame, text="DECISION MODE", bg="#101820",
+                 fg="#94a3b8", font=("Segoe UI", 9)).pack(anchor="w")
+        self.mode_var = tk.StringVar(value=self.learning_mode)
+        tk.OptionMenu(mode_frame, self.mode_var,
+                      "rule_based", "learning", "mixed").pack(anchor="w")
 
         tk.Button(
             controls,
@@ -489,22 +505,6 @@ class EdenVisualizer:
             if self.active_view == "network"
             else "Click an agent to inspect its profile"
         ))
-
-        button.config(
-            bg="#047857" if active else "#334155",
-            fg="white",
-            activebackground="#065f46"
-        )
-
-        if self.active_view == "network":
-            hint = (
-                "Click a subject to inspect relationships "
-                "• Green: friends • Red: rivals"
-            )
-        else:
-            hint = "Click an agent to inspect its profile"
-
-        self.view_hint.config(text=hint)
 
     def network_positions(self):
         agents = sorted(
@@ -650,13 +650,6 @@ class EdenVisualizer:
                 fill=fill,
                 font=("Consolas", 11, "bold")
             )
-            fill = self.colors[agent_id % len(self.colors)] if connected else "#475569"
-            canvas.create_oval(x - 21, y - 21, x + 21, y + 21,
-                               fill="#1c2933", outline="#ffffff" if highlighted else fill,
-                               width=4 if highlighted else 2)
-            canvas.create_text(x, y, text=f"{agent_id:03d}", fill=fill,
-                               font=("Consolas", 11, "bold"))
-
         if selected is None:
             footer = (
                 "Select a subject to see their trust scores"
@@ -756,7 +749,8 @@ class EdenVisualizer:
     def update_subject_tabs(self):
         for button, name in (
             (self.profile_tab_button, "profile"),
-            (self.journal_tab_button, "journal")
+            (self.journal_tab_button, "journal"),
+            (self.intelligence_tab_button, "intelligence")
         ):
             active = self.active_subject_tab == name
 
@@ -794,9 +788,9 @@ class EdenVisualizer:
             return
 
         if self.active_subject_tab == "journal":
-            self.set_profile_text(
-                self.format_journal(agent)
-            )
+            self.set_profile_text(self.format_journal(agent))
+        elif self.active_subject_tab == "intelligence":
+            self.set_profile_text(self.format_intelligence(agent))
         else:
             self.set_profile_text(
                 self.format_profile(agent)
@@ -895,6 +889,67 @@ class EdenVisualizer:
         )
 
         return profile
+
+    # ======================================
+    # AGENT INTELLIGENCE / Q-VALUES
+    # ======================================
+
+    def format_intelligence(self, agent):
+        heading = (
+            f"EDEN / SUBJECT {agent.id:03d} / INTELLIGENCE\n"
+            f"{'─' * 35}\n\n"
+            f"World mode: {self.learning_mode}\n"
+            f"Agent policy: {'Q-learning' if getattr(agent, 'learning_enabled', False) else 'Rule-based'}\n"
+            f"Current action: {agent.last_action}\n"
+            f"Energy: {agent.energy}/100 | Hunger: {agent.hunger}/100\n\n"
+        )
+        if not getattr(agent, "learning_enabled", False):
+            return (heading + "This subject follows the original rule-based policy.\n\n"
+                    "Choose Learning or Mixed from DECISION MODE, then click RESET.\n"
+                    "Advance a few days and select a learning subject.\n\n"
+                    "In Mixed mode, even-numbered subjects learn.")
+
+        learner = getattr(agent, "learner", None)
+        if learner is None:
+            return heading + "No Q-learning engine is attached to this subject."
+
+        from learning import ACTIONS
+        state = learner.state(agent)
+        values = {action: learner.value(state, action) for action in ACTIONS}
+        best_value = max(values.values())
+        best_actions = [a for a, v in values.items() if abs(v - best_value) < 1e-9]
+        hunger, energy, known_food = state
+        lines = [
+            heading,
+            "CURRENT LEARNING STATE",
+            f"Hunger: {hunger} | Energy: {energy}",
+            f"Known food: {'yes' if known_food else 'no'}",
+            f"Last decision: {getattr(agent, 'last_decision', 'None')}",
+            f"Last reward: {getattr(agent, 'last_reward', 0):+.2f}",
+            f"Learning updates: {learner.updates}",
+            f"Learned state-action entries: {len(learner.q_table)}",
+            "",
+            "Q-VALUES FOR CURRENT STATE",
+        ]
+        for action, value in values.items():
+            bar = '█' * min(20, round(abs(value)))
+            lines.append(f"{action:10s} {value:+9.3f}  {bar}")
+        lines.extend([
+            "",
+            f"Highest estimated value: {', '.join(best_actions)}",
+            "(Ties are possible; epsilon exploration can choose another action.)",
+            "",
+            "ALL LEARNED STATE-ACTION VALUES",
+        ])
+        if not learner.q_table:
+            lines.append("No Q-values learned yet. Advance the simulation.")
+        else:
+            for (known_state, action), value in sorted(
+                learner.q_table.items(), key=lambda item: (str(item[0][0]), item[0][1])
+            ):
+                lines.append(f"{str(known_state)} | {action:10s} | {value:+.3f}")
+        lines.extend(["", "Q-values estimate discounted rewards, not probabilities."])
+        return "\n".join(lines)
 
     # ======================================
     # PERSONAL JOURNAL
@@ -1079,7 +1134,8 @@ class EdenVisualizer:
             text="▶ PLAY"
         )
 
-        self.world = World(seed=42)
+        self.learning_mode = self.mode_var.get()
+        self.world = World(seed=42, learning_mode=self.learning_mode)
         self.selected_agent = None
         self.active_subject_tab = "profile"
 
