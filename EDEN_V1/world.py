@@ -5,13 +5,25 @@ from config import WORLD_SIZE, NUM_AGENTS, NUM_FOOD, DAYS_PER_SEASON, MAX_FOOD, 
 
 
 class World:
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, learning_mode="rule_based"):
+        valid_modes = {"rule_based", "learning", "mixed"}
+        if learning_mode not in valid_modes:
+            raise ValueError(f"learning_mode must be one of {sorted(valid_modes)}")
         if seed is not None:
             random.seed(seed)
+        self.learning_mode = learning_mode
         self.day = 0
         self.season = "Spring"
         self.agents = [
-            Agent(agent_id, random.randrange(WORLD_SIZE), random.randrange(WORLD_SIZE))
+            Agent(
+                agent_id,
+                random.randrange(WORLD_SIZE),
+                random.randrange(WORLD_SIZE),
+                learning_enabled=(
+                    learning_mode == "learning"
+                    or (learning_mode == "mixed" and agent_id % 2 == 0)
+                ),
+            )
             for agent_id in range(NUM_AGENTS)
         ]
         self.food = set()
@@ -56,8 +68,6 @@ class World:
             + 0.10 * prior_trust
             - 0.20 * scarcity * hunger_pressure
         )
-        # v1.2.2: both agents' recent recorded experiences inform this
-        # encounter. This is a transparent rule, not machine learning.
         history_modifier = (
             memory_influence(first, second.id)
             + memory_influence(second, first.id)
@@ -90,7 +100,6 @@ class World:
             second.adjust_trust(first.id, -second_loss, "Disagreement")
             event = "disagreement"
 
-        # Record each agent's perspective on the same observed interaction.
         for agent, other in ((first, second), (second, first)):
             agent.episodes.remember(
                 self.day, event.replace(" ", "_"),
@@ -117,7 +126,7 @@ class World:
                 if second.id in first.nearby_agents:
                     self.interact(first, second)
 
-        print(f"\\nDAY {self.day} | {self.season}")
+        print(f"\nDAY {self.day} | {self.season}")
         for agent in self.agents:
             print(agent.status())
         print(f"Food remaining: {len(self.food)}")
