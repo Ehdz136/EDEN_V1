@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>b141ec3b-76b6-452c-9c2a-af0dfbbc7bf9</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>visualizer.py</StartupFile>
+    <StartupFile>learning_agent_demo.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -27,6 +27,9 @@
     <Compile Include="EDEN_V1.py" />
     <Compile Include="Experiments\experiment_001.py" />
     <Compile Include="Experiments\experiment_002.py" />
+    <Compile Include="learning.py" />
+    <Compile Include="learning_agent_demo.py" />
+    <Compile Include="learning_demo.py" />
     <Compile Include="memory_demo.py" />
     <Compile Include="research.py" />
     <Compile Include="Visualized_research\visualize_experiment002.py" />

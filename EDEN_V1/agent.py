@@ -1,10 +1,11 @@
 import random
 from config import WORLD_SIZE
 from episodic_memory import EpisodicMemory
+from learning import QLearner
 
 
 class Agent:
-    def __init__(self, agent_id, x, y):
+    def __init__(self, agent_id, x, y, learning_enabled=False):
         self.id = agent_id
         self.x = x
         self.y = y
@@ -22,6 +23,10 @@ class Agent:
         self.nearby_agents = []
         self.relationships = {}
         self.episodes = EpisodicMemory(capacity=200)
+        self.learning_enabled = learning_enabled
+        self.learner = QLearner() if learning_enabled else None
+        self.last_reward = 0.0
+        self.last_decision = "None"
 
     def perceive(self, world):
         for food_x, food_y in world.food:
@@ -120,8 +125,13 @@ class Agent:
 
     def act(self, world):
         self.perceive(world)
-        action = self.decide()
+        state = self.learner.state(self) if self.learning_enabled else None
+        action = self.learner.choose_action(state) if self.learning_enabled else self.decide()
+        self.last_decision = action
         self.last_action = action
+        before_energy = self.energy
+        before_hunger = self.hunger
+        before_food = self.food_collected
 
         if action == "explore":
             self.move()
@@ -154,6 +164,22 @@ class Agent:
 
         self.energy = max(0, min(100, self.energy))
         self.hunger = max(0, min(100, self.hunger))
+
+        if self.learning_enabled:
+            # A simple, transparent reward: food is valuable; improving
+            # energy and reducing hunger are beneficial. Reward is based on
+            # observed changes AFTER applying the world's limits.
+            reward = (
+                10.0 * (self.food_collected - before_food)
+                + 0.10 * (self.energy - before_energy)
+                + 0.15 * (before_hunger - self.hunger)
+            )
+            self.last_reward = round(reward, 3)
+            self.perceive(world)
+            next_state = self.learner.state(self)
+            self.learner.update(state, action, reward, next_state)
+        else:
+            self.last_reward = 0.0
 
     def status(self):
         return (
